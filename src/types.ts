@@ -4,4 +4,11 @@ export interface Character {
     status:string;
     species:string;
     image:string;
+    gender:string;
+}
+export interface CharactersResponse {
+    info:{
+        pages:number;
+    }
+    results: Character[];
 }
