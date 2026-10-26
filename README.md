@@ -66,4 +66,4 @@ npm run preview
 
 ## Live Demo
 
-Not deployed yet. The public URL will be added after deployment.
+[Open Rick & Morty Character Explorer](https://rick-morty-explorer-blush.vercel.app/)
