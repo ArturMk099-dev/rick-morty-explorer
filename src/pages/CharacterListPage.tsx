@@ -30,7 +30,22 @@ function CharacterListPage() {
     searchQuery.trim() !== (appliedParams.get("name") ?? "").trim() ||
     selectedStatus !== (appliedParams.get("status") ?? "").toLowerCase() ||
     selectedGender !== (appliedParams.get("gender") ?? "").toLowerCase();
-  async function loadCharacters(pageNumber: number) {
+  const [retryCount, setRetryCount] = useState(0);
+  const [hasRequestError, setHasRequesterror] = useState(false);
+  function createParams(PageNumber: number) {
+    const params = new URLSearchParams({
+      name: searchQuery.trim(),
+      page: String(PageNumber),
+    });
+    if (selectedStatus !== "") {
+      params.set("status", selectedStatus);
+    }
+    if (selectedGender !== "") {
+      params.set("gender", selectedGender);
+    }
+    return params;
+  }
+  function applyParams(params: URLSearchParams) {
     if (isLoading) return;
     const now = Date.now();
     if (now < nextRequestAt) {
@@ -38,122 +53,163 @@ function CharacterListPage() {
       setErrorMessage(`Please wait ${seconds} seconds before trying again.`);
       return;
     }
-    setNextRequestAt(now + 2000);
-    setHasSearched(true);
-    setIsLoading(true);
-    setErrorMessage("");
-    try {
-      const params = new URLSearchParams({
-        name: searchQuery.trim(),
-        page: String(pageNumber),
-      });
-      if (selectedStatus !== "") {
-        params.set("status", selectedStatus);
-      }
-      if (selectedGender !== "") {
-        params.set("gender", selectedGender);
-      }
-      setSearchParams(params);
-      const response = await fetch(
-        `https://rickandmortyapi.com/api/character?${params}`,
-      );
-      if (response.status === 404) {
-        setCharacters([]);
-        setTotalPages(0);
-        return;
-      }
-      if (!response.ok) {
-        throw new Error(`Request failed:${response.status}`);
-      }
-      const data: CharactersResponse = await response.json();
-      setCharacters(data.results);
-      const receivedStatuses = data.results.map(
-        (character) => character.status,
-      );
-      setStatusOptions((previousOptions) => [
-        ...new Set([...previousOptions, ...receivedStatuses]),
-      ]);
-      const receivedGenders = data.results.map((character) => character.gender);
-      setGenderOptions((previousOptions) => [
-        ...new Set([...previousOptions, ...receivedGenders]),
-      ]);
-      setTotalPages(data.info.pages);
-      setPage(pageNumber);
-      setAppliedParams(params);
-    } catch (error) {
-      console.error(error);
-      setNextRequestAt(Date.now() + 30000);
-      setErrorMessage("Could not load characters. Please try again.");
-    } finally {
-      setIsLoading(false);
+    if (params.toString() === searchParams.toString()) {
+      setRetryCount((previous) => previous + 1);
+      return;
     }
+    setSearchParams(params);
   }
   useEffect(() => {
-    loadCharacters(initialPage);
-  }, []);
-
+    const controller = new AbortController();
+    const urlName = (searchParams.get("name") ?? "").trim();
+    const urlStatus = (searchParams.get("status") ?? "").toLowerCase();
+    const urlGender = (searchParams.get("gender") ?? "").toLowerCase();
+    const params = new URLSearchParams({
+      name: urlName,
+      page: String(initialPage),
+    });
+    if (urlStatus !== "") params.set("status", urlStatus);
+    if (urlGender !== "") params.set("gender", urlGender);
+    setSearchQuery(urlName);
+    setSelectedStatus(urlStatus);
+    setSelectedGender(urlGender);
+    async function loadCharacters() {
+      setNextRequestAt(Date.now() + 2000);
+      setHasSearched(true);
+      setIsLoading(true);
+      setErrorMessage("");
+      setHasRequesterror(false);
+      try {
+        const response = await fetch(
+          `https://rickandmortyapi.com/api/character?${params}`,
+          { signal: controller.signal },
+        );
+        if (controller.signal.aborted) return;
+        if (response.status === 404) {
+          setCharacters([]);
+          setTotalPages(0);
+          setPage(initialPage);
+          setAppliedParams(params);
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(`Request failed: ${response.status}`);
+        }
+        const data: CharactersResponse = await response.json();
+        if (controller.signal.aborted) return;
+        setCharacters(data.results);
+        const receivedStatuses = data.results.map(
+          (character) => character.status,
+        );
+        setStatusOptions((previousOptions) => [
+          ...new Set([...previousOptions, ...receivedStatuses]),
+        ]);
+        const receivedGenders = data.results.map(
+          (character) => character.gender,
+        );
+        setGenderOptions((previousOptions) => [
+          ...new Set([...previousOptions, ...receivedGenders]),
+        ]);
+        setTotalPages(data.info.pages);
+        setPage(initialPage);
+        setAppliedParams(params);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setHasRequesterror(true);
+        console.error(error);
+        setNextRequestAt(Date.now() + 30000);
+        setErrorMessage("Could not load characters. Please try again.");
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+        }
+      }
+    }
+    loadCharacters();
+    return () => controller.abort();
+  }, [searchParams, initialPage, retryCount]);
   return (
     <main>
       <h1>{pageTitle}</h1>
       <p>Explore characters from the Rick and Morty universe.</p>
-      <label>
-        Search by name
-        <input
-          type="search"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-        />
-      </label>
-      <label>
-        Status
-        <select
-          value={selectedStatus}
-          onChange={(event) => setSelectedStatus(event.target.value)}
+      <div className="filters">
+        <label>
+          Search by name
+          <input
+            placeholder="Search characters..."
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+        </label>
+        <label>
+          Status
+          <select
+            value={selectedStatus}
+            onChange={(event) => setSelectedStatus(event.target.value)}
+          >
+            <option value="">All statuses</option>
+            {statusOption.map((status) => (
+              <option key={status} value={status.toLowerCase()}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Gender
+          <select
+            value={selectedGender}
+            onChange={(event) => setSelectedGender(event.target.value)}
+          >
+            <option value="">All Genders</option>
+            {genderOptions.map((gender) => (
+              <option key={gender} value={gender.toLowerCase()}>
+                {gender}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="button" onClick={() => setSearchQuery("")}>
+          Clear Search
+        </button>
+        <button
+          className="button-primary"
+          type="button"
+          disabled={isLoading}
+          onClick={() => applyParams(createParams(1))}
         >
-          <option value="">All statuses</option>
-          {statusOption.map((status) => (
-            <option key={status} value={status.toLowerCase()}>
-              {status}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Gender
-        <select
-          value={selectedGender}
-          onChange={(event) => setSelectedGender(event.target.value)}
-        >
-          <option value="">All Genders</option>
-          {genderOptions.map((gender) => (
-            <option key={gender} value={gender.toLowerCase()}>
-              {gender}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button type="button" onClick={() => setSearchQuery("")}>
-        Clear Search
-      </button>
-      <button
-        type="button"
-        disabled={isLoading}
-        onClick={() => loadCharacters(1)}
-      >
-        Load Characters
-      </button>
+          Load Characters
+        </button>
+      </div>
       {isLoading && <p>Loading characters...</p>}
-      {errorMessage && <p role="alert">{errorMessage}</p>}
+
+      {errorMessage && (
+        <div>
+          <p role="alert">{errorMessage}</p>
+          {hasRequestError && (
+            <button
+              type="button"
+              className="details-retry"
+              disabled={isLoading}
+              onClick={() => applyParams(searchParams)}
+            >
+              Try again
+            </button>
+          )}
+        </div>
+      )}
+
       {hasSearched &&
         !isLoading &&
         !errorMessage &&
         characters.length === 0 && <p> No characters found.</p>}
       {totalPages > 0 && (
-        <div>
+        <div className="pagination">
           <button
             type="button"
             disabled={isLoading || hasPendingFilters || page <= 1}
-            onClick={() => loadCharacters(page - 1)}
+            onClick={() => applyParams(createParams(page - 1))}
           >
             Previous
           </button>
@@ -163,18 +219,18 @@ function CharacterListPage() {
           <button
             type="button"
             disabled={isLoading || hasPendingFilters || page >= totalPages}
-            onClick={() => loadCharacters(page + 1)}
+            onClick={() => applyParams(createParams(page + 1))}
           >
             Next
           </button>
         </div>
       )}
-      <ul>
+      <ul className="character-grid">
         {characters.map((character) => (
           <li key={character.id}>
             <Link
               to={`./characters/${character.id}?${appliedParams.toString()}`}
-              style={{ display: "block" }}
+              className="character-card"
             >
               <h2>{character.name}</h2>
               <img src={character.image} alt={character.name} width={150} />
