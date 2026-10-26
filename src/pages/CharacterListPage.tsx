@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Character, CharactersResponse } from "../types";
 import { Link, useSearchParams } from "react-router-dom";
+import { loadFilterOptions } from "../api/filters";
 function CharacterListPage() {
   const pageTitle = "Rick & Morty Explorer";
   const [searchParams, setSearchParams] = useSearchParams();
@@ -32,6 +33,8 @@ function CharacterListPage() {
     selectedGender !== (appliedParams.get("gender") ?? "").toLowerCase();
   const [retryCount, setRetryCount] = useState(0);
   const [hasRequestError, setHasRequesterror] = useState(false);
+  const [filtersError, setFiltersError] = useState("");
+  const [filtersRetryCount, setFiltersRetryCount] = useState(0);
   function createParams(PageNumber: number) {
     const params = new URLSearchParams({
       name: searchQuery.trim(),
@@ -59,6 +62,28 @@ function CharacterListPage() {
     }
     setSearchParams(params);
   }
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadOptions() {
+      setFiltersError("");
+      try {
+        const options = await loadFilterOptions(controller.signal);
+        if (controller.signal.aborted) return;
+        setStatusOptions((previous) => [
+          ...new Set([...previous, ...options.statuses]),
+        ]);
+        setGenderOptions((previous) => [
+          ...new Set([...previous, ...options.genders]),
+        ]);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error(error);
+        setFiltersError("Could not load filters. Please try again.");
+      }
+    }
+    loadOptions();
+    return () => controller.abort();
+  }, [filtersRetryCount]);
   useEffect(() => {
     const controller = new AbortController();
     const urlName = (searchParams.get("name") ?? "").trim();
@@ -182,6 +207,18 @@ function CharacterListPage() {
           Load Characters
         </button>
       </div>
+      {filtersError && (
+        <div>
+          <p role="alert">{filtersError}</p>
+          <button
+            type="button"
+            className="details-retry"
+            onClick={() => setFiltersRetryCount((previous) => previous + 1)}
+          >
+            Retry filters
+          </button>
+        </div>
+      )}
       {isLoading && <p>Loading characters...</p>}
 
       {errorMessage && (

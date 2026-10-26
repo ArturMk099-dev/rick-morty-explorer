@@ -49,10 +49,9 @@ select {
 }
 .filters {
   display: grid;
-  grid-template-columns: minmax(180px, 2fr) repeat(
-      2,
-      minmax(130px, 1fr)
-    ) auto auto;
+  grid-template-columns:
+    minmax(180px, 2fr) repeat(2, minmax(130px, 1fr))
+    auto auto;
   align-items: end;
   gap: 16px;
   margin: 28px 0;
@@ -189,7 +188,9 @@ select {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s, border-color 0.2s;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s;
 }
 
 .pagination button:not(:disabled):hover {
