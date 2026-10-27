@@ -66,4 +66,4 @@ npm run preview
 
 ## Live Demo
 
-[Open Rick & Morty Character Explorer](https://rick-morty-explorer-blush.vercel.app/)
+[Open Rick & Morty Character Explorer](https://artur-rickmorty.site/)
